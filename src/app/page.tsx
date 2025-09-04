@@ -1,33 +1,87 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { ShieldCheck, CalendarCheck, PiggyBank, LineChart, ArrowRight, Mail, Sparkles } from "lucide-react";
+import {
+  ShieldCheck,
+  CalendarCheck,
+  PiggyBank,
+  LineChart,
+  ArrowRight,
+  Mail,
+  Sparkles,
+  Wallet,
+  CreditCard,
+  BarChart2,
+  Settings,
+  Star,
+  User
+} from "lucide-react";
 
 export default function SavinekLanding() {
   const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [tab, setTab] = useState<"overview" | "bills" | "budget" | "invest">("overview");
+
+  // Personalised greeting based on time of day
+  const greeting = useMemo(() => {
+    const h = new Date().getHours();
+    if (h < 5) return "Good night";
+    if (h < 12) return "Good morning";
+    if (h < 18) return "Good afternoon";
+    return "Good evening";
+  }, []);
+
+  // Load saved name to personalise returning visits
+  useEffect(() => {
+    const saved = localStorage.getItem("savinekName");
+    if (saved) setName(saved);
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!email) return;
     setStatus("loading");
     try {
-      // TODO: wire this to your backend or a form service.
-      // For now we just simulate success after 900ms.
+      // TODO: connect to your backend or a form service
       await new Promise((r) => setTimeout(r, 900));
       setStatus("success");
+      if (name.trim()) localStorage.setItem("savinekName", name.trim());
       setEmail("");
-    } catch (err) {
+    } catch {
       setStatus("error");
     }
   }
 
+  // Subtle prosperity motifs (counts 27 + 108)
+  const prosperityDots = useMemo(() => Array.from({ length: 27 }), []);
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-900 text-white overflow-x-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-900 text-white overflow-x-hidden relative">
       {/* Subtle aurora background */}
       <div className="pointer-events-none fixed inset-0 opacity-40 [mask-image:radial-gradient(1200px_600px_at_50%_-10%,#000_40%,transparent_100%)]">
-        <div className="absolute -top-40 left-1/2 -translate-x-1/2 h-[600px] w-[1200px] bg-[conic-gradient(at_50%_50%,#22c55e_0deg,#06b6d4_120deg,#6366f1_240deg,#22c55e_360deg)] blur-3xl"/>
+        <div className="absolute -top-40 left-1/2 -translate-x-1/2 h-[600px] w-[1200px] bg-[conic-gradient(at_50%_50%,#22c55e_0deg,#06b6d4_120deg,#6366f1_240deg,#22c55e_360deg)] blur-3xl" />
+      </div>
+
+      {/* Discrete prosperity watermark (accessible-hidden) */}
+      <div aria-hidden className="pointer-events-none select-none fixed inset-x-0 bottom-10 mx-auto max-w-6xl opacity-[0.06] text-[11px] tracking-[0.3em] text-emerald-100/80 text-center">
+        SHRI • LAKSHMI • KUBER • NIDHI • SIDDHI
+      </div>
+
+      {/* Decorative stars: 27 small sparkles */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 opacity-30">
+        {prosperityDots.map((_, i) => (
+          <Star
+            key={i}
+            className="absolute h-[6px] w-[6px] text-emerald-200/60"
+            style={{
+              top: `${(i * 37) % 100}%`,
+              left: `${(i * 61) % 100}%`,
+              transform: `scale(${0.8 + ((i * 13) % 20) / 50})`,
+            }}
+          />
+        ))}
       </div>
 
       {/* Nav */}
@@ -39,13 +93,16 @@ export default function SavinekLanding() {
           <span className="text-xl font-semibold tracking-tight">Savinek</span>
         </div>
         <a href="#waitlist" className="group inline-flex items-center gap-2 rounded-xl px-4 py-2 bg-white/10 ring-1 ring-white/15 hover:bg-white/15 transition">
-          Join waitlist <ArrowRight className="h-4 w-4 transition -translate-x-0 group-hover:translate-x-0.5"/>
+          Join waitlist <ArrowRight className="h-4 w-4 transition -translate-x-0 group-hover:translate-x-0.5" />
         </a>
       </header>
 
       {/* Hero */}
       <main className="relative z-10">
-        <section className="max-w-7xl mx-auto px-6 pt-8 pb-20 md:pt-16 md:pb-28">
+        <section className="max-w-7xl mx-auto px-6 pt-8 pb-12 md:pt-16 md:pb-16">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-emerald-400/10 ring-1 ring-emerald-300/30 px-3 py-1 text-emerald-200 text-xs">
+            <span className="inline-flex h-2 w-2 rounded-full bg-emerald-300" /> Alpha preview
+          </div>
           <div className="grid md:grid-cols-2 gap-10 items-center">
             <div>
               <motion.h1
@@ -54,7 +111,8 @@ export default function SavinekLanding() {
                 transition={{ duration: 0.6 }}
                 className="text-4xl md:text-6xl font-bold leading-tight tracking-tight"
               >
-                Save smarter. <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 to-teal-200">Live freer.</span>
+                {greeting}{name ? `, ${name}` : ""}. Save smarter. {" "}
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 to-teal-200">Live freer.</span>
               </motion.h1>
 
               <motion.p
@@ -63,7 +121,7 @@ export default function SavinekLanding() {
                 transition={{ duration: 0.6, delay: 0.1 }}
                 className="mt-5 text-slate-200/90 md:text-lg max-w-xl"
               >
-                Savinek is your AI accountant that protects bills, auto-budgets around your goals, and grows your savings & investments on autopilot.
+                Your AI accountant that protects bills, auto‑budgets around your goals, and grows your savings & investments — on autopilot.
               </motion.p>
 
               <motion.div
@@ -73,63 +131,83 @@ export default function SavinekLanding() {
                 className="mt-8"
               >
                 <form id="waitlist" onSubmit={onSubmit} className="w-full max-w-md rounded-2xl bg-white/10 backdrop-blur-sm p-2 ring-1 ring-white/15">
+                  <div className="flex items-center gap-2 px-3 pb-1">
+                    <div className="flex items-center gap-2 text-slate-100/80 text-xs">
+                      <ShieldCheck className="h-4 w-4" /> Founder pricing for first 108 sign‑ups
+                    </div>
+                  </div>
                   <div className="flex items-center gap-2">
                     <div className="flex items-center gap-2 px-3 text-slate-100/80">
-                      <Mail className="h-4 w-4"/>
+                      <User className="h-4 w-4" />
+                    </div>
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      type="text"
+                      placeholder="Your name"
+                      className="flex-1 bg-transparent placeholder:text-slate-300/60 focus:outline-none py-3 text-sm"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <div className="flex items-center gap-2 px-3 text-slate-100/80">
+                      <Mail className="h-4 w-4" />
                     </div>
                     <input
                       value={email}
-                      onChange={(e)=>setEmail(e.target.value)}
+                      onChange={(e) => setEmail(e.target.value)}
                       type="email"
-                      placeholder="Enter your email"
+                      placeholder="Email to join the waitlist"
                       required
                       className="flex-1 bg-transparent placeholder:text-slate-300/60 focus:outline-none py-3 text-sm"
                     />
                     <button
                       type="submit"
                       disabled={status === "loading"}
-                      className="shrink-0 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:scale-[.99] text-slate-900 font-medium px-4 py-2 transition"
+                      className="shrink-0 rounded-xl bg-gradient-to-r from-emerald-400 to-amber-300 text-slate-900 font-semibold px-4 py-2 hover:brightness-110 active:scale-[.99] transition"
                     >
                       {status === "loading" ? "Joining…" : status === "success" ? "Joined ✓" : "Join"}
                     </button>
                   </div>
                 </form>
                 {status === "success" && (
-                  <p className="mt-3 text-emerald-200/90 text-sm">You're on the list! We'll be in touch soon.</p>
+                  <p className="mt-3 text-emerald-200/90 text-sm">You’re on the list! We’ll be in touch soon.</p>
                 )}
                 {status === "error" && (
                   <p className="mt-3 text-rose-200/90 text-sm">Something went wrong. Please try again.</p>
                 )}
 
-                <div className="mt-6 flex items-center gap-4 text-slate-300/80 text-xs">
-                  <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4"/> Bank-grade encryption</div>
-                  <div className="flex items-center gap-2"><CalendarCheck className="h-4 w-4"/> Direct debit protection</div>
+                <div className="mt-6 flex flex-wrap items-center gap-4 text-slate-300/80 text-xs">
+                  <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" /> Read‑only bank connections</div>
+                  <div className="flex items-center gap-2"><CalendarCheck className="h-4 w-4" /> Direct debit protection</div>
+                  <div className="flex items-center gap-2"><Settings className="h-4 w-4" /> Privacy‑first design</div>
                 </div>
               </motion.div>
             </div>
 
+            {/* Interactive beta preview */}
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.15 }}
-              className="md:justify-self-end"
+              className="md:justify-self-end w-full max-w-md mx-auto"
             >
-              {/* Glass card mock */}
-              <div className="relative w-full max-w-md mx-auto">
-                <div className="absolute -inset-1 bg-gradient-to-r from-emerald-400/30 to-teal-300/30 blur-2xl rounded-3xl"/>
-                <div className="relative rounded-3xl bg-white/10 backdrop-blur-md p-6 ring-1 ring-white/15">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold">This month</h3>
-                    <span className="text-emerald-300 text-sm">on track</span>
+              <div className="relative">
+                <div className="absolute -inset-1 bg-gradient-to-r from-emerald-400/30 to-teal-300/30 blur-2xl rounded-3xl" />
+                <div className="relative rounded-3xl bg-white/10 backdrop-blur-md ring-1 ring-white/15">
+                  <div className="px-4 pt-4 flex items-center justify-between">
+                    <div className="flex gap-2 text-xs">
+                      <TabButton active={tab === "overview"} onClick={() => setTab("overview")} label="Overview" />
+                      <TabButton active={tab === "bills"} onClick={() => setTab("bills")} label="Bills" />
+                      <TabButton active={tab === "budget"} onClick={() => setTab("budget")} label="Budget" />
+                      <TabButton active={tab === "invest"} onClick={() => setTab("invest")} label="Invest" />
+                    </div>
+                    <span className="text-emerald-300 text-[11px] px-2 py-1 rounded-lg bg-emerald-500/10 ring-1 ring-emerald-400/30">beta preview</span>
                   </div>
-                  <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
-                    <Stat label="Income" value="$4,800"/>
-                    <Stat label="Bills" value="$2,145"/>
-                    <Stat label="Safe to save" value="$820" positive/>
-                  </div>
-                  <div className="mt-6 grid grid-cols-2 gap-3">
-                    <FeatureCard icon={<PiggyBank className="h-4 w-4"/>} title="Auto‑savings" desc="Pay yourself first"/>
-                    <FeatureCard icon={<LineChart className="h-4 w-4"/>} title="Smart invests" desc="ETF drip-feed"/>
+                  <div className="p-5">
+                    {tab === "overview" && <OverviewPane name={name} />}
+                    {tab === "bills" && <BillsPane />}
+                    {tab === "budget" && <BudgetPane />}
+                    {tab === "invest" && <InvestPane />}
                   </div>
                 </div>
               </div>
@@ -137,18 +215,18 @@ export default function SavinekLanding() {
           </div>
         </section>
 
-        {/* Features */}
-        <section className="max-w-7xl mx-auto px-6 pb-20">
+        {/* Value props */}
+        <section className="max-w-7xl mx-auto px-6 pb-16">
           <div className="grid md:grid-cols-3 gap-6">
-            <Callout
+            <ValueCard
               title="Bills, always covered"
               desc="We predict direct debits and keep a safety buffer so you never get caught out."
             />
-            <Callout
+            <ValueCard
               title="Budgets that adapt"
-              desc="Your plan flexes to income swings and goal changes—without you lifting a finger."
+              desc="Your plan flexes to income swings and goal changes — without you lifting a finger."
             />
-            <Callout
+            <ValueCard
               title="Grow on autopilot"
               desc="Spare cash flows to savings and diversified ETFs, automatically."
             />
@@ -163,19 +241,90 @@ export default function SavinekLanding() {
               <p className="mt-2 text-slate-200/90">Early adopters get founder pricing and priority access.</p>
             </div>
             <a href="#waitlist" className="inline-flex items-center gap-2 rounded-xl px-5 py-3 bg-white text-slate-900 font-medium hover:bg-slate-100 transition">
-              Join the waitlist <ArrowRight className="h-4 w-4"/>
+              Join the waitlist <ArrowRight className="h-4 w-4" />
             </a>
           </div>
         </section>
       </main>
 
-      {/* Footer */}
+      {/* Footer (no Pty Ltd yet) */}
       <footer className="relative z-10 border-t border-white/10">
         <div className="max-w-7xl mx-auto px-6 py-8 text-sm text-slate-300/80 flex flex-col md:flex-row items-center justify-between gap-3">
-          <p>© {new Date().getFullYear()} Savinek Pty Ltd. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Savinek. All rights reserved.</p>
           <p>Contact: <a className="underline decoration-dotted" href="mailto:founder@savinek.com">founder@savinek.com</a></p>
         </div>
       </footer>
+    </div>
+  );
+}
+
+function TabButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-3 py-1 rounded-lg transition ring-1 ${
+        active ? "bg-emerald-500/20 ring-emerald-400/40" : "bg-white/5 ring-white/10 hover:bg-white/10"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function OverviewPane({ name }: { name: string }) {
+  return (
+    <div className="space-y-4">
+      <div className="text-sm text-slate-200/90">{name ? `Hi ${name}, here is a glimpse of your month` : "Here is a glimpse of your month"}</div>
+      <div className="grid grid-cols-3 gap-3 text-sm">
+        <Stat label="Income" value="$4,800" />
+        <Stat label="Bills" value="$2,145" />
+        <Stat label="Safe to save" value="$820" positive />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <FeatureCard icon={<PiggyBank className="h-4 w-4" />} title="Auto‑savings" desc="Pay yourself first" />
+        <FeatureCard icon={<LineChart className="h-4 w-4" />} title="Smart invests" desc="ETF drip‑feed" />
+      </div>
+    </div>
+  );
+}
+
+function BillsPane() {
+  return (
+    <div className="space-y-3 text-sm">
+      <Row icon={<CreditCard className="h-4 w-4" />} label="Spotify" rightText="Due 12 Sep • $11.99" />
+      <Row icon={<CreditCard className="h-4 w-4" />} label="Electricity" rightText="Due 18 Sep • $142.60" />
+      <Row icon={<CreditCard className="h-4 w-4" />} label="Phone" rightText="Due 21 Sep • $49.00" />
+      <div className="rounded-xl bg-emerald-500/10 ring-1 ring-emerald-400/30 p-3 text-emerald-200/90">All bills covered — buffer: $420</div>
+    </div>
+  );
+}
+
+function BudgetPane() {
+  return (
+    <div className="space-y-4 text-sm">
+      <Row icon={<Wallet className="h-4 w-4" />} label="Essentials" rightText="$1,450" />
+      <Row icon={<Wallet className="h-4 w-4" />} label="Goals" rightText="$600" />
+      <Row icon={<Wallet className="h-4 w-4" />} label="Discretionary" rightText="$520" />
+      <div className="rounded-xl bg-white/5 ring-1 ring-white/10 p-3">Save suggestion: move $200 from Discretionary to Goals — reach target 2 months sooner.</div>
+    </div>
+  );
+}
+
+function InvestPane() {
+  return (
+    <div className="space-y-4 text-sm">
+      <Row icon={<BarChart2 className="h-4 w-4" />} label="ETF drip" rightText="$150 / fortnight" />
+      <Row icon={<BarChart2 className="h-4 w-4" />} label="Emergency fund" rightText="$3,200 / $6,000" />
+      <div className="rounded-xl bg-white/5 ring-1 ring-white/10 p-3">Projection: at current rate, emergency fund complete in 4 months.</div>
+    </div>
+  );
+}
+
+function Row({ icon, label, rightText }: { icon: React.ReactNode; label: string; rightText: string }) {
+  return (
+    <div className="flex items-center justify-between rounded-xl bg-white/5 ring-1 ring-white/10 px-3 py-2">
+      <div className="flex items-center gap-2 text-slate-200/90">{icon} <span>{label}</span></div>
+      <div className="text-slate-300/80">{rightText}</div>
     </div>
   );
 }
@@ -198,7 +347,7 @@ function FeatureCard({ icon, title, desc }: { icon: React.ReactNode; title: stri
   );
 }
 
-function Callout({ title, desc }: { title: string; desc: string }) {
+function ValueCard({ title, desc }: { title: string; desc: string }) {
   return (
     <div className="rounded-3xl bg-white/5 ring-1 ring-white/10 p-6">
       <h4 className="text-lg font-semibold">{title}</h4>
@@ -206,3 +355,4 @@ function Callout({ title, desc }: { title: string; desc: string }) {
     </div>
   );
 }
+
