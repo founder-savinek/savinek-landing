@@ -1,36 +1,37 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// Create the client here (no "@/lib" import needed)
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
 export async function POST(req: Request) {
   try {
-    const { email, name } = await req.json();
+    const body = await req.json();
+    const email = String(body?.email ?? "").trim();
 
-    // Debug booleans (safe)
-    console.log("WL_INSERT", {
-      hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
-      hasKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    });
+    if (!email) {
+      return NextResponse.json({ ok: false, error: "Email required" }, { status: 400 });
+    }
 
-    const { error } = await supabase.from("waitlist").insert({ email, name });
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY! // if using service role on server
+    );
+
+    const { error } = await supabase.from("waitlist").insert({ email });
 
     if (error) {
-      if (error.message.toLowerCase().includes("duplicate")) {
-        return NextResponse.json({ ok: true, deduped: true });
-      }
-      console.error("Supabase insert error:", error.message);
-      return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
+      // log details and return a safe error
+      console.error("Supabase insert error:", error);
+      return NextResponse.json({ ok: false, error: "Database error" }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true });
-  } catch (err: any) {
-    console.error("Route error:", err?.message);
-    return NextResponse.json({ ok: false, error: err?.message || "Bad request" }, { status: 500 });
+  } catch (err: unknown) {
+    // Narrow unknown safely
+    if (err instanceof Error) {
+      console.error("Route error:", err.message);
+    } else {
+      console.error("Route error:", err);
+    }
+    return NextResponse.json({ ok: false, error: "Server error" }, { status: 500 });
   }
 }
 
