@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// Use one client at module scope (server-only env)
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -9,26 +8,43 @@ const supabase = createClient(
 
 export async function POST(req: Request) {
   try {
-    const { email } = await req.json();
-    const value = typeof email === "string" ? email.trim() : "";
+    const ct = req.headers.get("content-type") || "";
+    let email = "", name = "";
 
-    if (!value) {
-      return NextResponse.json({ ok: false, error: "Email required" }, { status: 400 });
+    if (ct.includes("application/json")) {
+      const body = await req.json();
+      email = typeof body?.email === "string" ? body.email.trim() : "";
+      name  = typeof body?.name  === "string" ? body.name.trim()  : "";
+    } else if (
+      ct.includes("application/x-www-form-urlencoded") ||
+      ct.includes("multipart/form-data")
+    ) {
+      const form = await req.formData();
+      email = String(form.get("email") ?? "").trim();
+      name  = String(form.get("name")  ?? "").trim();
+    } else {
+      return NextResponse.json({ ok: false, error: "Unsupported content-type" }, { status: 415 });
     }
 
-    const { error } = await supabase.from("waitlist").insert({ email: value });
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json({ ok: false, error: "Invalid email" }, { status: 400 });
+    }
+
+    const payload = { email: email.toLowerCase(), ...(name && { name }) };
+
+    // idempotent: create if new, update name if it already exists
+    const { error } = await supabase
+      .from("waitlist")
+      .upsert(payload, { onConflict: "email", ignoreDuplicates: false });
 
     if (error) {
-      if (/duplicate key/i.test(error.message)) {
-        return NextResponse.json({ ok: false, error: "Already joined" }, { status: 409 });
-      }
-      console.error("Supabase insert error:", error);
+      console.error("Supabase upsert error:", error);
       return NextResponse.json({ ok: false, error: "Database error" }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true });
-  } catch (err: unknown) {
-    console.error("Route error:", err instanceof Error ? err.message : err);
+  } catch (err) {
+    console.error("Route error:", err);
     return NextResponse.json({ ok: false, error: "Server error" }, { status: 500 });
   }
 }
