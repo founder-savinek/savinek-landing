@@ -6,34 +6,72 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-function getMetaFromBody(body: any) {
+type Meta = {
+  referred_by: string | null;
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  utm_term: string | null;
+  utm_content: string | null;
+  signup_path: string | null;
+};
+
+type UpdateFields = Meta & {
+  name: string | null;
+  user_agent: string | null;
+};
+
+const pickString = (v: unknown): string | null =>
+  typeof v === "string" ? v : null;
+
+function extractMeta(input: unknown): Meta {
+  const src =
+    typeof input === "object" && input !== null
+      ? (input as Record<string, unknown>)
+      : {};
   return {
-    referred_by: typeof body?.ref === "string" ? body.ref : null,
-    utm_source: typeof body?.utm_source === "string" ? body.utm_source : null,
-    utm_medium: typeof body?.utm_medium === "string" ? body.utm_medium : null,
-    utm_campaign: typeof body?.utm_campaign === "string" ? body.utm_campaign : null,
-    utm_term: typeof body?.utm_term === "string" ? body.utm_term : null,
-    utm_content: typeof body?.utm_content === "string" ? body.utm_content : null,
-    signup_path: typeof body?.signup_path === "string" ? body.signup_path : null,
+    referred_by: pickString((src as any)?.ref ?? src.referred_by),
+    utm_source: pickString(src.utm_source),
+    utm_medium: pickString(src.utm_medium),
+    utm_campaign: pickString(src.utm_campaign),
+    utm_term: pickString(src.utm_term),
+    utm_content: pickString(src.utm_content),
+    signup_path: pickString(src.signup_path),
   };
 }
 
 export async function POST(req: Request) {
   try {
     const ct = req.headers.get("content-type") || "";
-    let email = "", name = "", meta: Record<string, string | null> = {};
+    let email = "";
+    let name = "";
+    let meta: Meta = {
+      referred_by: null,
+      utm_source: null,
+      utm_medium: null,
+      utm_campaign: null,
+      utm_term: null,
+      utm_content: null,
+      signup_path: null,
+    };
     const userAgent = req.headers.get("user-agent") || null;
 
     if (ct.includes("application/json")) {
-      const body = await req.json();
-      email = typeof body?.email === "string" ? body.email.trim() : "";
-      name  = typeof body?.name  === "string" ? body.name.trim()  : "";
-      meta  = getMetaFromBody(body);
-    } else if (ct.includes("application/x-www-form-urlencoded") || ct.includes("multipart/form-data")) {
+      const body: unknown = await req.json();
+      if (typeof body === "object" && body !== null) {
+        const o = body as Record<string, unknown>;
+        email = typeof o.email === "string" ? o.email.trim() : "";
+        name = typeof o.name === "string" ? o.name.trim() : "";
+      }
+      meta = extractMeta(body);
+    } else if (
+      ct.includes("application/x-www-form-urlencoded") ||
+      ct.includes("multipart/form-data")
+    ) {
       const form = await req.formData();
       email = String(form.get("email") ?? "").trim();
-      name  = String(form.get("name")  ?? "").trim();
-      meta  = getMetaFromBody({
+      name = String(form.get("name") ?? "").trim();
+      meta = extractMeta({
         ref: form.get("ref"),
         utm_source: form.get("utm_source"),
         utm_medium: form.get("utm_medium"),
@@ -43,16 +81,22 @@ export async function POST(req: Request) {
         signup_path: form.get("signup_path"),
       });
     } else {
-      return NextResponse.json({ ok: false, error: "Unsupported content-type" }, { status: 415 });
+      return NextResponse.json(
+        { ok: false, error: "Unsupported content-type" },
+        { status: 415 }
+      );
     }
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return NextResponse.json({ ok: false, error: "Invalid email" }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: "Invalid email" },
+        { status: 400 }
+      );
     }
 
     const emailLower = email.toLowerCase();
 
-    // 1) check if user exists (case-insensitive because we store lowercase)
+    // Does a row already exist?
     const { data: existing, error: selErr } = await supabase
       .from("waitlist")
       .select("id, referral_code, referred_by")
@@ -65,18 +109,18 @@ export async function POST(req: Request) {
     }
 
     if (existing) {
-      // update name/meta if provided, keep referral_code
-      const updates: Record<string, string | null> = {};
+      // Update optional fields if provided
+      const updates: Partial<UpdateFields> = {};
       if (name) updates.name = name;
-      // set referred_by only if it's empty and we received a ref
-      if (!existing.referred_by && meta.referred_by) updates.referred_by = meta.referred_by;
-      if (meta.utm_source)  updates.utm_source  = meta.utm_source;
-      if (meta.utm_medium)  updates.utm_medium  = meta.utm_medium;
-      if (meta.utm_campaign)updates.utm_campaign= meta.utm_campaign;
-      if (meta.utm_term)    updates.utm_term    = meta.utm_term;
+      if (!existing.referred_by && meta.referred_by)
+        updates.referred_by = meta.referred_by;
+      if (meta.utm_source) updates.utm_source = meta.utm_source;
+      if (meta.utm_medium) updates.utm_medium = meta.utm_medium;
+      if (meta.utm_campaign) updates.utm_campaign = meta.utm_campaign;
+      if (meta.utm_term) updates.utm_term = meta.utm_term;
       if (meta.utm_content) updates.utm_content = meta.utm_content;
       if (meta.signup_path) updates.signup_path = meta.signup_path;
-      if (userAgent)        updates.user_agent  = userAgent;
+      if (userAgent) updates.user_agent = userAgent;
 
       if (Object.keys(updates).length > 0) {
         const { error: updErr } = await supabase
@@ -85,15 +129,18 @@ export async function POST(req: Request) {
           .eq("email", emailLower);
         if (updErr) {
           console.error("Supabase update error:", updErr);
-          // still return ok with existing code to avoid blocking UX
+          // continue; we'll still return existing referral_code
         }
       }
 
-      return NextResponse.json({ ok: true, referralCode: existing.referral_code });
+      return NextResponse.json({
+        ok: true,
+        referralCode: existing.referral_code,
+      });
     }
 
-    // 2) insert new row; referral_code is generated by DB default
-    const insertPayload: Record<string, string | null> = {
+    // Insert new row (DB generates referral_code)
+    const insertPayload: Record<string, string | null> & { email: string } = {
       email: emailLower,
       name: name || null,
       referred_by: meta.referred_by,
@@ -114,7 +161,6 @@ export async function POST(req: Request) {
 
     if (insErr) {
       if (/duplicate key/i.test(insErr.message)) {
-        // race: just read and return
         const { data: again } = await supabase
           .from("waitlist")
           .select("referral_code")

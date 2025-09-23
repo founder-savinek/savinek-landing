@@ -158,7 +158,7 @@ export default function SavinekLanding() {
     }
   }, [status]);
 
-  // ✅ Real submit to API (JSON), keeps form accessible (has method/action fallback)
+  // ✅ submit to API (JSON) with referral/UTM
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!email) return;
@@ -485,7 +485,6 @@ export default function SavinekLanding() {
                     {tab === "bills" && <BillsPane />}
                     {tab === "budget" && (
                       <BudgetPane
-                        income={income}
                         bills={bills}
                         goalsAmt={goalsAmt}
                         discretionary={discretionary}
@@ -719,12 +718,10 @@ function BillsPane() {
 }
 
 function BudgetPane({
-  income,
   bills,
   goalsAmt,
   discretionary,
 }: {
-  income: number;
   bills: number;
   goalsAmt: number;
   discretionary: number;
@@ -843,3 +840,4 @@ function ValueCard({ title, desc }: { title: string; desc: string }) {
     </div>
   );
 }
+
