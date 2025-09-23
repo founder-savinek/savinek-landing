@@ -1,58 +1,132 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// One server-side client (service role bypasses RLS). NEVER expose this key to the browser.
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+function getMetaFromBody(body: any) {
+  return {
+    referred_by: typeof body?.ref === "string" ? body.ref : null,
+    utm_source: typeof body?.utm_source === "string" ? body.utm_source : null,
+    utm_medium: typeof body?.utm_medium === "string" ? body.utm_medium : null,
+    utm_campaign: typeof body?.utm_campaign === "string" ? body.utm_campaign : null,
+    utm_term: typeof body?.utm_term === "string" ? body.utm_term : null,
+    utm_content: typeof body?.utm_content === "string" ? body.utm_content : null,
+    signup_path: typeof body?.signup_path === "string" ? body.signup_path : null,
+  };
+}
+
 export async function POST(req: Request) {
   try {
     const ct = req.headers.get("content-type") || "";
-    let email = "";
-    let name = "";
+    let email = "", name = "", meta: Record<string, string | null> = {};
+    const userAgent = req.headers.get("user-agent") || null;
 
     if (ct.includes("application/json")) {
       const body = await req.json();
       email = typeof body?.email === "string" ? body.email.trim() : "";
       name  = typeof body?.name  === "string" ? body.name.trim()  : "";
-    } else if (
-      ct.includes("application/x-www-form-urlencoded") ||
-      ct.includes("multipart/form-data")
-    ) {
+      meta  = getMetaFromBody(body);
+    } else if (ct.includes("application/x-www-form-urlencoded") || ct.includes("multipart/form-data")) {
       const form = await req.formData();
       email = String(form.get("email") ?? "").trim();
       name  = String(form.get("name")  ?? "").trim();
+      meta  = getMetaFromBody({
+        ref: form.get("ref"),
+        utm_source: form.get("utm_source"),
+        utm_medium: form.get("utm_medium"),
+        utm_campaign: form.get("utm_campaign"),
+        utm_term: form.get("utm_term"),
+        utm_content: form.get("utm_content"),
+        signup_path: form.get("signup_path"),
+      });
     } else {
-      return NextResponse.json(
-        { ok: false, error: "Unsupported content-type" },
-        { status: 415 }
-      );
+      return NextResponse.json({ ok: false, error: "Unsupported content-type" }, { status: 415 });
     }
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ ok: false, error: "Invalid email" }, { status: 400 });
     }
 
-    // store lowercase email; include name only if present
-    const payload = { email: email.toLowerCase(), ...(name && { name }) };
+    const emailLower = email.toLowerCase();
 
-    // idempotent upsert (creates or updates name if email exists)
-    const { error } = await supabase
+    // 1) check if user exists (case-insensitive because we store lowercase)
+    const { data: existing, error: selErr } = await supabase
       .from("waitlist")
-      .upsert(payload, { onConflict: "email", ignoreDuplicates: false });
+      .select("id, referral_code, referred_by")
+      .eq("email", emailLower)
+      .maybeSingle();
 
-    if (error) {
-      // Duplicate errors should be rare with upsert, but keep a friendly response:
-      if (/duplicate key/i.test(error.message)) {
-        return NextResponse.json({ ok: false, error: "Already joined" }, { status: 409 });
-      }
-      console.error("Supabase upsert error:", error);
+    if (selErr) {
+      console.error("Supabase select error:", selErr);
       return NextResponse.json({ ok: false, error: "Database error" }, { status: 500 });
     }
 
-    return NextResponse.json({ ok: true }, { status: 200 });
+    if (existing) {
+      // update name/meta if provided, keep referral_code
+      const updates: Record<string, string | null> = {};
+      if (name) updates.name = name;
+      // set referred_by only if it's empty and we received a ref
+      if (!existing.referred_by && meta.referred_by) updates.referred_by = meta.referred_by;
+      if (meta.utm_source)  updates.utm_source  = meta.utm_source;
+      if (meta.utm_medium)  updates.utm_medium  = meta.utm_medium;
+      if (meta.utm_campaign)updates.utm_campaign= meta.utm_campaign;
+      if (meta.utm_term)    updates.utm_term    = meta.utm_term;
+      if (meta.utm_content) updates.utm_content = meta.utm_content;
+      if (meta.signup_path) updates.signup_path = meta.signup_path;
+      if (userAgent)        updates.user_agent  = userAgent;
+
+      if (Object.keys(updates).length > 0) {
+        const { error: updErr } = await supabase
+          .from("waitlist")
+          .update(updates)
+          .eq("email", emailLower);
+        if (updErr) {
+          console.error("Supabase update error:", updErr);
+          // still return ok with existing code to avoid blocking UX
+        }
+      }
+
+      return NextResponse.json({ ok: true, referralCode: existing.referral_code });
+    }
+
+    // 2) insert new row; referral_code is generated by DB default
+    const insertPayload: Record<string, string | null> = {
+      email: emailLower,
+      name: name || null,
+      referred_by: meta.referred_by,
+      utm_source: meta.utm_source,
+      utm_medium: meta.utm_medium,
+      utm_campaign: meta.utm_campaign,
+      utm_term: meta.utm_term,
+      utm_content: meta.utm_content,
+      signup_path: meta.signup_path,
+      user_agent: userAgent,
+    };
+
+    const { data: inserted, error: insErr } = await supabase
+      .from("waitlist")
+      .insert(insertPayload)
+      .select("referral_code")
+      .single();
+
+    if (insErr) {
+      if (/duplicate key/i.test(insErr.message)) {
+        // race: just read and return
+        const { data: again } = await supabase
+          .from("waitlist")
+          .select("referral_code")
+          .eq("email", emailLower)
+          .single();
+        return NextResponse.json({ ok: true, referralCode: again?.referral_code ?? null });
+      }
+      console.error("Supabase insert error:", insErr);
+      return NextResponse.json({ ok: false, error: "Database error" }, { status: 500 });
+    }
+
+    return NextResponse.json({ ok: true, referralCode: inserted.referral_code });
   } catch (err) {
     console.error("Route error:", err);
     return NextResponse.json({ ok: false, error: "Server error" }, { status: 500 });
