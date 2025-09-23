@@ -16,14 +16,32 @@ import {
   Settings,
   Star,
   User,
+  Copy,
+  Check,
 } from "lucide-react";
 
 /* ---------- tiny helpers ---------- */
 const currency = (n: number) =>
-  isFinite(n) ? n.toLocaleString("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }) : "$0";
+  isFinite(n)
+    ? n.toLocaleString("en-AU", {
+        style: "currency",
+        currency: "AUD",
+        maximumFractionDigits: 0,
+      })
+    : "$0";
 
 /* ---------- toast ---------- */
-function Toast({ show, title, desc, onClose }: { show: boolean; title: string; desc?: string; onClose: () => void }) {
+function Toast({
+  show,
+  title,
+  desc,
+  onClose,
+}: {
+  show: boolean;
+  title: string;
+  desc?: string;
+  onClose: () => void;
+}) {
   useEffect(() => {
     if (!show) return;
     const t = setTimeout(onClose, 3000);
@@ -48,7 +66,9 @@ function Toast({ show, title, desc, onClose }: { show: boolean; title: string; d
             </div>
             <div className="flex-1">
               <div className="font-semibold">{title}</div>
-              {desc ? <div className="text-sm text-slate-600 mt-0.5">{desc}</div> : null}
+              {desc ? (
+                <div className="text-sm text-slate-600 mt-0.5">{desc}</div>
+              ) : null}
             </div>
             <button
               onClick={onClose}
@@ -65,20 +85,39 @@ function Toast({ show, title, desc, onClose }: { show: boolean; title: string; d
 }
 
 export default function SavinekLanding() {
+  /* ---- waitlist form state ---- */
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [status, setStatus] =
     useState<"idle" | "loading" | "success" | "error">("idle");
+  const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  /* ---- marketing params ---- */
+  const [refParam, setRefParam] = useState<string | null>(null);
+  const [utm, setUtm] = useState({
+    utm_source: null as string | null,
+    utm_medium: null as string | null,
+    utm_campaign: null as string | null,
+    utm_term: null as string | null,
+    utm_content: null as string | null,
+    signup_path: "/",
+  });
+
+  /* ---- hero tabs ---- */
   const [tab, setTab] =
     useState<"overview" | "bills" | "budget" | "invest">("overview");
 
-  // --- interactive budget knobs ---
+  /* ---- interactive budget knobs ---- */
   const [income, setIncome] = useState<number>(4800);
   const [bills, setBills] = useState<number>(2145);
   const [goalsPct, setGoalsPct] = useState<number>(20); // % of income to goals
 
   const safeToSave = Math.max(0, income - bills);
-  const goalsAmt = Math.min(Math.round((goalsPct / 100) * income), Math.round(safeToSave));
+  const goalsAmt = Math.min(
+    Math.round((goalsPct / 100) * income),
+    Math.round(safeToSave)
+  );
   const discretionary = Math.max(0, income - bills - goalsAmt);
 
   // Personalised greeting based on time of day
@@ -96,7 +135,22 @@ export default function SavinekLanding() {
     if (saved) setName(saved);
   }, []);
 
-  // toast auto-reset
+  // Capture ?ref & UTM params once
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const u = new URL(window.location.href);
+    setRefParam(u.searchParams.get("ref"));
+    setUtm({
+      utm_source: u.searchParams.get("utm_source"),
+      utm_medium: u.searchParams.get("utm_medium"),
+      utm_campaign: u.searchParams.get("utm_campaign"),
+      utm_term: u.searchParams.get("utm_term"),
+      utm_content: u.searchParams.get("utm_content"),
+      signup_path: u.pathname || "/",
+    });
+  }, []);
+
+  // Reset toast status after shown
   useEffect(() => {
     if (status === "success") {
       const t = setTimeout(() => setStatus("idle"), 3200);
@@ -104,7 +158,7 @@ export default function SavinekLanding() {
     }
   }, [status]);
 
-  // ✅ Real submit to your API (no page reload)
+  // ✅ Real submit to API (JSON), keeps form accessible (has method/action fallback)
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!email) return;
@@ -113,13 +167,22 @@ export default function SavinekLanding() {
       const res = await fetch("/api/waitlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, name }),
+        body: JSON.stringify({
+          email,
+          name,
+          ref: refParam,
+          ...utm,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Request failed");
+      setReferralCode(data?.referralCode || null);
       setStatus("success");
       if (name.trim()) localStorage.setItem("savinekName", name.trim());
       setEmail("");
+      // optional GA event if you wire GA later:
+      // // @ts-ignore
+      // window?.gtag?.("event", "join_waitlist", { method: "form" });
     } catch (err) {
       console.error(err);
       setStatus("error");
@@ -145,7 +208,10 @@ export default function SavinekLanding() {
       </div>
 
       {/* Discrete prosperity watermark */}
-      <div aria-hidden className="pointer-events-none select-none fixed inset-x-0 bottom-10 mx-auto max-w-6xl opacity-[0.06] text-[11px] tracking-[0.3em] text-emerald-100/80 text-center">
+      <div
+        aria-hidden
+        className="pointer-events-none select-none fixed inset-x-0 bottom-10 mx-auto max-w-6xl opacity-[0.06] text-[11px] tracking-[0.3em] text-emerald-100/80 text-center"
+      >
         SHRI • LAKSHMI • KUBER • NIDHI • SIDDHI
       </div>
 
@@ -172,8 +238,12 @@ export default function SavinekLanding() {
           </div>
           <span className="text-xl font-semibold tracking-tight">Savinek</span>
         </div>
-        <a href="#waitlist" className="group inline-flex items-center gap-2 rounded-xl px-4 py-2 bg-white/10 ring-1 ring-white/15 hover:bg-white/15 transition">
-          Join waitlist <ArrowRight className="h-4 w-4 transition -translate-x-0 group-hover:translate-x-0.5" />
+        <a
+          href="#waitlist"
+          className="group inline-flex items-center gap-2 rounded-xl px-4 py-2 bg-white/10 ring-1 ring-white/15 hover:bg-white/15 transition"
+        >
+          Join waitlist{" "}
+          <ArrowRight className="h-4 w-4 transition -translate-x-0 group-hover:translate-x-0.5" />
         </a>
       </header>
 
@@ -191,8 +261,11 @@ export default function SavinekLanding() {
                 transition={{ duration: 0.6 }}
                 className="text-4xl md:text-6xl font-bold leading-tight tracking-tight"
               >
-                {greeting}{name ? `, ${name}` : ""}. Save smarter.{" "}
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 to-teal-200">Live freer.</span>
+                {greeting}
+                {name ? `, ${name}` : ""}. Save smarter.{" "}
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 to-teal-200">
+                  Live freer.
+                </span>
               </motion.h1>
 
               <motion.p
@@ -201,7 +274,8 @@ export default function SavinekLanding() {
                 transition={{ duration: 0.6, delay: 0.1 }}
                 className="mt-5 text-slate-200/90 md:text-lg max-w-xl"
               >
-                Your AI accountant that protects bills, auto-budgets around your goals, and grows your savings & investments — on autopilot.
+                Your AI accountant that protects bills, auto-budgets around your
+                goals, and grows your savings & investments — on autopilot.
               </motion.p>
 
               {/* Waitlist form */}
@@ -220,7 +294,8 @@ export default function SavinekLanding() {
                 >
                   <div className="flex items-center gap-2 px-3 pb-1">
                     <div className="flex items-center gap-2 text-slate-100/80 text-xs">
-                      <ShieldCheck className="h-4 w-4" /> Founder pricing for first 108 sign-ups
+                      <ShieldCheck className="h-4 w-4" /> Founder pricing for
+                      first 108 sign-ups
                     </div>
                   </div>
 
@@ -258,19 +333,98 @@ export default function SavinekLanding() {
                       disabled={status === "loading"}
                       className="shrink-0 rounded-xl bg-gradient-to-r from-emerald-400 to-amber-300 text-slate-900 font-semibold px-4 py-2 hover:brightness-110 active:scale-[.99] transition"
                     >
-                      {status === "loading" ? "Joining…" : status === "success" ? "Joined ✓" : "Join"}
+                      {status === "loading"
+                        ? "Joining…"
+                        : status === "success"
+                        ? "Joined ✓"
+                        : "Join"}
                     </button>
                   </div>
                 </form>
 
+                {/* Referral share box */}
+                {status === "success" && referralCode && (
+                  <div className="mt-4 rounded-2xl bg-white/10 ring-1 ring-white/15 p-4">
+                    <div className="text-sm text-emerald-200/90 mb-2">
+                      Thanks for joining! Invite friends and skip the line:
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 rounded-xl bg-black/30 ring-1 ring-white/10 px-3 py-2 text-xs break-all">
+                        {`https://www.savinek.com/?ref=${referralCode}`}
+                      </div>
+                      <button
+                        onClick={async () => {
+                          await navigator.clipboard.writeText(
+                            `https://www.savinek.com/?ref=${referralCode}`
+                          );
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 1800);
+                        }}
+                        className="inline-flex items-center gap-2 rounded-xl bg-white text-slate-900 text-sm font-medium px-3 py-2 hover:bg-slate-100 transition"
+                      >
+                        {copied ? (
+                          <Check className="h-4 w-4" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                        {copied ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+
+                    {/* quick share */}
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                      <a
+                        className="rounded-lg px-3 py-2 bg-white/10 ring-1 ring-white/15 hover:bg-white/15 transition"
+                        href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(
+                          "I just joined Savinek — AI that protects bills, auto-budgets and grows savings."
+                        )}&url=${encodeURIComponent(
+                          `https://www.savinek.com/?ref=${referralCode}`
+                        )}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Share on X/Twitter
+                      </a>
+                      <a
+                        className="rounded-lg px-3 py-2 bg-white/10 ring-1 ring-white/15 hover:bg-white/15 transition"
+                        href={`https://wa.me/?text=${encodeURIComponent(
+                          `Join me on Savinek: https://www.savinek.com/?ref=${referralCode}`
+                        )}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        WhatsApp
+                      </a>
+                      <a
+                        className="rounded-lg px-3 py-2 bg-white/10 ring-1 ring-white/15 hover:bg-white/15 transition"
+                        href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(
+                          `https://www.savinek.com/?ref=${referralCode}`
+                        )}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        LinkedIn
+                      </a>
+                    </div>
+                  </div>
+                )}
+
                 {status === "error" && (
-                  <p className="mt-3 text-rose-200/90 text-sm">Something went wrong. Please try again.</p>
+                  <p className="mt-3 text-rose-200/90 text-sm">
+                    Something went wrong. Please try again.
+                  </p>
                 )}
 
                 <div className="mt-6 flex flex-wrap items-center gap-4 text-slate-300/80 text-xs">
-                  <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" /> Read-only bank connections</div>
-                  <div className="flex items-center gap-2"><CalendarCheck className="h-4 w-4" /> Direct debit protection</div>
-                  <div className="flex items-center gap-2"><Settings className="h-4 w-4" /> Privacy-first design</div>
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4" /> Read-only bank connections
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CalendarCheck className="h-4 w-4" /> Direct debit protection
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Settings className="h-4 w-4" /> Privacy-first design
+                  </div>
                 </div>
               </motion.div>
             </div>
@@ -287,12 +441,30 @@ export default function SavinekLanding() {
                 <div className="relative rounded-3xl bg-white/10 backdrop-blur-md ring-1 ring-white/15">
                   <div className="px-4 pt-4 flex items-center justify-between">
                     <div className="flex gap-2 text-xs">
-                      <TabButton active={tab === "overview"} onClick={() => setTab("overview")} label="Overview" />
-                      <TabButton active={tab === "bills"} onClick={() => setTab("bills")} label="Bills" />
-                      <TabButton active={tab === "budget"} onClick={() => setTab("budget")} label="Budget" />
-                      <TabButton active={tab === "invest"} onClick={() => setTab("invest")} label="Invest" />
+                      <TabButton
+                        active={tab === "overview"}
+                        onClick={() => setTab("overview")}
+                        label="Overview"
+                      />
+                      <TabButton
+                        active={tab === "bills"}
+                        onClick={() => setTab("bills")}
+                        label="Bills"
+                      />
+                      <TabButton
+                        active={tab === "budget"}
+                        onClick={() => setTab("budget")}
+                        label="Budget"
+                      />
+                      <TabButton
+                        active={tab === "invest"}
+                        onClick={() => setTab("invest")}
+                        label="Invest"
+                      />
                     </div>
-                    <span className="text-emerald-300 text-[11px] px-2 py-1 rounded-lg bg-emerald-500/10 ring-1 ring-emerald-400/30">beta preview</span>
+                    <span className="text-emerald-300 text-[11px] px-2 py-1 rounded-lg bg-emerald-500/10 ring-1 ring-emerald-400/30">
+                      beta preview
+                    </span>
                   </div>
 
                   <div className="p-5">
@@ -349,10 +521,17 @@ export default function SavinekLanding() {
         <section className="max-w-7xl mx-auto px-6 pb-24">
           <div className="rounded-3xl bg-gradient-to-r from-emerald-500/15 to-teal-400/15 ring-1 ring-white/10 p-8 md:p-12 flex flex-col md:flex-row items-center justify-between gap-6">
             <div>
-              <h3 className="text-2xl md:text-3xl font-semibold">Be first to try Savinek</h3>
-              <p className="mt-2 text-slate-200/90">Early adopters get founder pricing and priority access.</p>
+              <h3 className="text-2xl md:text-3xl font-semibold">
+                Be first to try Savinek
+              </h3>
+              <p className="mt-2 text-slate-200/90">
+                Early adopters get founder pricing and priority access.
+              </p>
             </div>
-            <a href="#waitlist" className="inline-flex items-center gap-2 rounded-xl px-5 py-3 bg-white text-slate-900 font-medium hover:bg-slate-100 transition">
+            <a
+              href="#waitlist"
+              className="inline-flex items-center gap-2 rounded-xl px-5 py-3 bg-white text-slate-900 font-medium hover:bg-slate-100 transition"
+            >
               Join the waitlist <ArrowRight className="h-4 w-4" />
             </a>
           </div>
@@ -363,7 +542,15 @@ export default function SavinekLanding() {
       <footer className="relative z-10 border-t border-white/10">
         <div className="max-w-7xl mx-auto px-6 py-8 text-sm text-slate-300/80 flex flex-col md:flex-row items-center justify-between gap-3">
           <p>© {new Date().getFullYear()} Savinek. All rights reserved.</p>
-          <p>Contact: <a className="underline decoration-dotted" href="mailto:founder@savinek.com">founder@savinek.com</a></p>
+          <p>
+            Contact:{" "}
+            <a
+              className="underline decoration-dotted"
+              href="mailto:founder@savinek.com"
+            >
+              founder@savinek.com
+            </a>
+          </p>
         </div>
       </footer>
     </div>
@@ -372,12 +559,22 @@ export default function SavinekLanding() {
 
 /* ---------- panes & cards ---------- */
 
-function TabButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+function TabButton({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
   return (
     <button
       onClick={onClick}
       className={`px-3 py-1 rounded-lg transition ring-1 ${
-        active ? "bg-emerald-500/20 ring-emerald-400/40" : "bg-white/5 ring-white/10 hover:bg-white/10"
+        active
+          ? "bg-emerald-500/20 ring-emerald-400/40"
+          : "bg-white/5 ring-white/10 hover:bg-white/10"
       }`}
     >
       {label}
@@ -398,12 +595,25 @@ function OverviewPane(props: {
   setBills: (v: number) => void;
   setGoalsPct: (v: number) => void;
 }) {
-  const { name, income, bills, goalsPct, goalsAmt, discretionary, safeToSave, setIncome, setBills, setGoalsPct } = props;
+  const {
+    name,
+    income,
+    bills,
+    goalsPct,
+    goalsAmt,
+    discretionary,
+    safeToSave,
+    setIncome,
+    setBills,
+    setGoalsPct,
+  } = props;
 
   return (
     <div className="space-y-4">
       <div className="text-sm text-slate-200/90">
-        {name ? `Hi ${name}, here’s a quick budget sandbox` : "Here’s a quick budget sandbox"}
+        {name
+          ? `Hi ${name}, here’s a quick budget sandbox`
+          : "Here’s a quick budget sandbox"}
       </div>
 
       {/* Editable row */}
@@ -414,7 +624,11 @@ function OverviewPane(props: {
             inputMode="numeric"
             pattern="[0-9]*"
             value={income}
-            onChange={(e) => setIncome(Math.max(0, Number(e.target.value.replace(/[^0-9]/g, "")) || 0))}
+            onChange={(e) =>
+              setIncome(
+                Math.max(0, Number(e.target.value.replace(/[^0-9]/g, "")) || 0)
+              )
+            }
             className="mt-1 w-full bg-transparent focus:outline-none text-white font-semibold"
           />
         </label>
@@ -425,7 +639,11 @@ function OverviewPane(props: {
             inputMode="numeric"
             pattern="[0-9]*"
             value={bills}
-            onChange={(e) => setBills(Math.max(0, Number(e.target.value.replace(/[^0-9]/g, "")) || 0))}
+            onChange={(e) =>
+              setBills(
+                Math.max(0, Number(e.target.value.replace(/[^0-9]/g, "")) || 0)
+              )
+            }
             className="mt-1 w-full bg-transparent focus:outline-none text-white font-semibold"
           />
         </label>
@@ -460,8 +678,16 @@ function OverviewPane(props: {
 
       {/* Live allocations */}
       <div className="grid grid-cols-2 gap-3">
-        <FeatureCard icon={<PiggyBank className="h-4 w-4" />} title="Goals" desc={currency(goalsAmt)} />
-        <FeatureCard icon={<LineChart className="h-4 w-4" />} title="Discretionary" desc={currency(discretionary)} />
+        <FeatureCard
+          icon={<PiggyBank className="h-4 w-4" />}
+          title="Goals"
+          desc={currency(goalsAmt)}
+        />
+        <FeatureCard
+          icon={<LineChart className="h-4 w-4" />}
+          title="Discretionary"
+          desc={currency(discretionary)}
+        />
       </div>
     </div>
   );
@@ -470,22 +696,58 @@ function OverviewPane(props: {
 function BillsPane() {
   return (
     <div className="space-y-3 text-sm">
-      <Row icon={<CreditCard className="h-4 w-4" />} label="Spotify" rightText="Due 12 Sep • $11.99" />
-      <Row icon={<CreditCard className="h-4 w-4" />} label="Electricity" rightText="Due 18 Sep • $142.60" />
-      <Row icon={<CreditCard className="h-4 w-4" />} label="Phone" rightText="Due 21 Sep • $49.00" />
-      <div className="rounded-xl bg-emerald-500/10 ring-1 ring-emerald-400/30 p-3 text-emerald-200/90">All bills covered — buffer: $420</div>
+      <Row
+        icon={<CreditCard className="h-4 w-4" />}
+        label="Spotify"
+        rightText="Due 12 Sep • $11.99"
+      />
+      <Row
+        icon={<CreditCard className="h-4 w-4" />}
+        label="Electricity"
+        rightText="Due 18 Sep • $142.60"
+      />
+      <Row
+        icon={<CreditCard className="h-4 w-4" />}
+        label="Phone"
+        rightText="Due 21 Sep • $49.00"
+      />
+      <div className="rounded-xl bg-emerald-500/10 ring-1 ring-emerald-400/30 p-3 text-emerald-200/90">
+        All bills covered — buffer: $420
+      </div>
     </div>
   );
 }
 
-function BudgetPane({ income, bills, goalsAmt, discretionary }: { income: number; bills: number; goalsAmt: number; discretionary: number }) {
+function BudgetPane({
+  income,
+  bills,
+  goalsAmt,
+  discretionary,
+}: {
+  income: number;
+  bills: number;
+  goalsAmt: number;
+  discretionary: number;
+}) {
   return (
     <div className="space-y-4 text-sm">
-      <Row icon={<Wallet className="h-4 w-4" />} label="Essentials (bills)" rightText={currency(bills)} />
-      <Row icon={<Wallet className="h-4 w-4" />} label="Goals" rightText={currency(goalsAmt)} />
-      <Row icon={<Wallet className="h-4 w-4" />} label="Discretionary" rightText={currency(discretionary)} />
+      <Row
+        icon={<Wallet className="h-4 w-4" />}
+        label="Essentials (bills)"
+        rightText={currency(bills)}
+      />
+      <Row
+        icon={<Wallet className="h-4 w-4" />}
+        label="Goals"
+        rightText={currency(goalsAmt)}
+      />
+      <Row
+        icon={<Wallet className="h-4 w-4" />}
+        label="Discretionary"
+        rightText={currency(discretionary)}
+      />
       <div className="rounded-xl bg-white/5 ring-1 ring-white/10 p-3">
-        Suggestion: if you increase Goals by $100, your target hits sooner—watch allocations update live in Overview.
+        Suggestion: tweak the Goals % to see how it shifts your plan instantly.
       </div>
     </div>
   );
@@ -494,35 +756,80 @@ function BudgetPane({ income, bills, goalsAmt, discretionary }: { income: number
 function InvestPane() {
   return (
     <div className="space-y-4 text-sm">
-      <Row icon={<BarChart2 className="h-4 w-4" />} label="ETF drip" rightText="$150 / fortnight" />
-      <Row icon={<BarChart2 className="h-4 w-4" />} label="Emergency fund" rightText="$3,200 / $6,000" />
-      <div className="rounded-xl bg-white/5 ring-1 ring-white/10 p-3">Projection: at current rate, emergency fund complete in 4 months.</div>
+      <Row
+        icon={<BarChart2 className="h-4 w-4" />}
+        label="ETF drip"
+        rightText="$150 / fortnight"
+      />
+      <Row
+        icon={<BarChart2 className="h-4 w-4" />}
+        label="Emergency fund"
+        rightText="$3,200 / $6,000"
+      />
+      <div className="rounded-xl bg-white/5 ring-1 ring-white/10 p-3">
+        Projection: at current rate, emergency fund complete in 4 months.
+      </div>
     </div>
   );
 }
 
-function Row({ icon, label, rightText }: { icon: React.ReactNode; label: string; rightText: string }) {
+function Row({
+  icon,
+  label,
+  rightText,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  rightText: string;
+}) {
   return (
     <div className="flex items-center justify-between rounded-xl bg-white/5 ring-1 ring-white/10 px-3 py-2">
-      <div className="flex items-center gap-2 text-slate-200/90">{icon} <span>{label}</span></div>
+      <div className="flex items-center gap-2 text-slate-200/90">
+        {icon} <span>{label}</span>
+      </div>
       <div className="text-slate-300/80">{rightText}</div>
     </div>
   );
 }
 
-function Stat({ label, value, positive }: { label: string; value: string; positive?: boolean }) {
+function Stat({
+  label,
+  value,
+  positive,
+}: {
+  label: string;
+  value: string;
+  positive?: boolean;
+}) {
   return (
     <div className="rounded-2xl bg-white/5 p-4 ring-1 ring-white/10">
       <div className="text-xs text-slate-300/80">{label}</div>
-      <div className={`mt-1 text-base font-semibold ${positive ? "text-emerald-300" : "text-white"}`}>{value}</div>
+      <div
+        className={`mt-1 text-base font-semibold ${
+          positive ? "text-emerald-300" : "text-white"
+        }`}
+      >
+        {value}
+      </div>
     </div>
   );
 }
 
-function FeatureCard({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
+function FeatureCard({
+  icon,
+  title,
+  desc,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  desc: string;
+}) {
   return (
     <div className="rounded-2xl bg-white/5 p-4 ring-1 ring-white/10">
-      <div className="flex items-center gap-2 text-emerald-300">{icon}<span className="text-xs uppercase tracking-wide">{title}</span></div>
+      <div className="flex items-center gap-2 text-emerald-300">
+        {icon}
+        <span className="text-xs uppercase tracking-wide">{title}</span>
+      </div>
       <p className="mt-2 text-sm text-slate-200/90">{desc}</p>
     </div>
   );
